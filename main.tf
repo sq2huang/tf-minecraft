@@ -1,13 +1,13 @@
 data "aws_ami" "docker_ami" {
-  most_recent = true
+most_recent = true
 
-  filter {
-    name   = "image-id"
-    # Amazon Linux
-    values = ["ami-026dea5602e368e96"]
-  }
+    filter {
+        name   = "image-id"
+        # Amazon Linux
+        values = ["ami-026dea5602e368e96"]
+    }
 
-  owners = ["amazon"]
+    owners = ["amazon"]
 }
 
 resource "aws_security_group" "tcp_port_25565" {
@@ -16,10 +16,11 @@ resource "aws_security_group" "tcp_port_25565" {
 
     # minecraft
     ingress {
-        from_port   = 25565
-        to_port     = 25565
-        protocol    = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
+        from_port        = 25565
+        to_port          = 25565
+        protocol         = "tcp"
+        ipv6_cidr_blocks = ["::/0"]
+        cidr_blocks      = ["0.0.0.0/0"]
     }
 
     # ssh
@@ -30,26 +31,50 @@ resource "aws_security_group" "tcp_port_25565" {
         cidr_blocks = ["0.0.0.0/0"]
     }
 
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
     tags = {
         Name = "minecraft_tcp_forwarding"
     }
 }
 
-resource "aws_instance" "minecraft" {
-  ami           =  data.aws_ami.docker_ami.id
-  instance_type = "t2.micro"
-
-  tags = {
-    Name = "Minecraft Server Terraform"
-  }
-  vpc_security_group_ids = [aws_security_group.tcp_port_25565.id]
+resource "aws_key_pair" "ssh_key" {
+    key_name   = "minecraft-tf"
+    public_key = file("~/.ssh/minecraft-tf.pub")
 }
 
-resource "aws_eip" "lb" {
-  instance = aws_instance.minecraft.id
-  vpc      = true
+resource "aws_instance" "minecraft" {
+    key_name      = aws_key_pair.ssh_key.key_name
+    ami           =  data.aws_ami.docker_ami.id
+    instance_type = "t2.small"
+
+    tags = {
+        Name = "Minecraft Server Terraform"
+    }
+    vpc_security_group_ids = [aws_security_group.tcp_port_25565.id]
+
+    connection {
+        type        ="ssh"
+        host        = self.public_ip
+        user        = "ec2-user"
+        private_key = file("~/.ssh/minecraft-tf")
+    }
+
+    provisioner "remote-exec" {
+        script = "start-server.sh"
+    }
+}
+
+resource "aws_eip" "elastic_ip" {
+    instance = aws_instance.minecraft.id
+    vpc      = true
 }
 
 output "public_ip" {
-  value = aws_instance.minecraft.public_ip
+    value = aws_eip.elastic_ip.public_ip
 }
