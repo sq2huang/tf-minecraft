@@ -1,6 +1,5 @@
 data "aws_ami" "docker_ami" {
-most_recent = true
-
+    most_recent = true
     filter {
         name   = "image-id"
         # Amazon Linux
@@ -59,7 +58,7 @@ resource "aws_instance" "minecraft" {
     vpc_security_group_ids = [aws_security_group.tcp_port_25565.id]
 
     connection {
-        type        ="ssh"
+        type        = "ssh"
         host        = self.public_ip
         user        = "ec2-user"
         private_key = file("~/.ssh/minecraft-tf")
